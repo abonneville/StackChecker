@@ -1,4 +1,6 @@
-"""
+""" Builds a call graph from a user provided ELF binary file, then saves the
+    information to file. The output file is intended to be opend by an
+    optional graph viewer.
 """
 import argparse
 
@@ -22,18 +24,15 @@ class SymbolMessage(IntEnum):
     none = auto()
     warning = auto()
 
-class SymbolType(IntEnum):
+class NodeType(IntEnum):
     index = 15
-    none = auto()
+    unknown = auto()
     function = auto()
     filename = auto()
     obj = auto()
-
-class NodeType(IntEnum):
-    unknown = auto()
-    function = auto()
     dispatch_table = auto()
     vtable = auto()
+    assembly = auto()
 
 tool_path = "C:\Program Files (x86)\Atollic\TrueSTUDIO for STM32 9.2.0\ARMTools\\bin\\"
 tool_prefix = "arm-atollic-eabi-"
@@ -51,6 +50,24 @@ def is_valid_line(s):
         return True
     except ValueError:
         return False
+
+def get_symbol_name(s):
+    """ Returns the name of the symbol
+        Must be qualified by calling is_valid_line()
+    """
+    begin = s.find('\t', 17)
+    begin2 = s.find(' ', 17)
+    if begin2 > begin:
+        begin = begin2
+
+    begin = s.find(' ', begin)
+    begin += 1
+
+    if begin != -1:
+        return s[begin:]
+    
+    return ""
+
 
 
 def is_function_start(s):
@@ -92,7 +109,6 @@ def get_function_name(s):
     
     return ""
 
-
 def is_branch(s):
     """ Detects if the line contains a valid function call/branch
         valid: ... 123A <MySymbol>
@@ -100,8 +116,6 @@ def is_branch(s):
         invalid:  .... (123A <MySymbol>)   <--reference to variable
     """
     begin = s.find('<')
-    #end = s.rfind('>')
-    #qualifier = s.find('(')
     
     if begin != -1 and s.endswith('>'):
         if not('+0x' in s[begin:-1]) and not('-0x' in s[begin:-1]):
@@ -147,304 +161,217 @@ def validate_input():
 
 
 
-def build_symbols(filename):
-    """ Analysis the binary input file and create an internal list of symbols.
+
+class Node():
+    """ Each node represents a function or object used in a call graph.
     """
-    terminal = subprocess.Popen([cmd, '--syms', '--demangle', filename ], shell=True, 
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT)
-    stdout, stderr = terminal.communicate()
-    lines = stdout.splitlines()
+    
+    def __init__(self, filename):
+        self.nodes = {}
+        self.filename = filename
 
-    nodes = []
-    for line in lines:
-        node = {}
-        if( is_valid_line(line[0:8]) ):
+    def get_symbols(self):
+        """ Creates a raw symbol list from the user provided input file
+        """
+        terminal = subprocess.Popen([cmd, '--syms', '--demangle', 
+                            self.filename ], shell=True, 
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+        stdout, stderr = terminal.communicate()
+        stdout = str(stdout, encoding='utf-8')
+        lines = stdout.splitlines()
 
-            """ Colmun(s) at the beginning of the line are fixed width.
-            """
+        return lines
 
-            """ The input file contains a collection of all symbols. Record only
-                functions and discard all other symbols.
-
-                TODO - for evaluation, record all symbols and optimize later
-            """
-            if line[SymbolType.index] == ord('F'):
-                node['type'] = SymbolType.function
-            elif line[SymbolType.index] == ord('f'):
-                node['type'] = SymbolType.filename
-            elif line[SymbolType.index] == ord('O'):
-                node['type'] = SymbolType.obj
-            else:
-                node['type'] = SymbolType.none
-
-            # Grab 32-bit address
-            node['address'] = line[0:8]
-
-            # Decode the symbol formatting
-            if line[SymbolScope.index] == ord('l'):
-                node['scope'] = SymbolScope.local
-            elif line[SymbolScope.index] == ord('g'):
-                node['scope'] = SymbolScope.glb
-            elif line[SymbolScope.index] == ord('u'):
-                node['scope'] = SymbolScope.un_glb
-            elif line[SymbolScope.index] == ord('!'):
-                node['scope'] = SymbolScope.error
-            else:
-                node['scope'] = SymbolScope.none
-
-            if line[SymbolMessage.index] == ord('W'):
-                node['message'] = SymbolMessage.warning
-            else:
-                node['message'] = SymbolMessage.none
+    def get_disassembly(self):
+        """ Disassemble the user provided input file
+        """
+        terminal = subprocess.Popen([cmd, '--disassemble-all', '--demangle', 
+                            self.filename ], shell=True, 
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+        stdout, stderr = terminal.communicate()
+        stdout = str(stdout, encoding='utf-8')
+        lines = stdout.splitlines()
+        return lines
 
 
-            """ The remainder of the columns are variable length word(s).
-            """
-            words = line[17:].split()
-            node['section'] = words[0]
-            node['size'] = int(words[1], 16)
-            try:
-                # Test, because some lines are missing the last field.
-                # Column width is 1 or more bytes
-                node['name'] = words[2:]
-            except IndexError:
-                # Column width is 0 bytes
-                node['name'] = ""
-
-            nodes.append(node)
+    def save(self):
+        """ Save all nodes to file
+        """
+        with open( self.filename + '.json', 'w') as outfile:
+            json.dump(self.nodes, outfile, indent=4)
 
 
-def build_symbol_table(symbols, filename):
-    """ Analysis the binary input file and create an internal list of symbols.
-    """
-    terminal = subprocess.Popen([cmd, '--syms', '--demangle', filename ], shell=True, 
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT)
-    stdout, stderr = terminal.communicate()
-    lines = stdout.splitlines()
+    def build(self):
+        """ Establish each node
+        """
+        lines = self.get_symbols()
 
-    for line in lines:
-        address = 0
-        if( is_valid_line(line[0:8]) ):
-            symbol = {}
+        for line in lines:
+            address = 0
+            if( is_valid_line(line[0:8]) ):
+                node = {}
 
-            """ Colmun(s) at the beginning of the line are fixed width.
-            """
+                node['name'] = get_symbol_name(line)
 
-            """ The input file contains a collection of all symbols; data, 
-                functions, etc...
-            """
-            if line[SymbolType.index] == ord('F'):
-                symbol['type'] = SymbolType.function
-            elif line[SymbolType.index] == ord('f'):
-                symbol['type'] = SymbolType.filename
-            elif line[SymbolType.index] == ord('O'):
-                symbol['type'] = SymbolType.obj
-            else:
-                symbol['type'] = SymbolType.none
+                """ These data columns are variable length word(s).
+                    TODO re-implement as method call to get string
+                """
+                words = line[17:].split()
+                node['section'] = words[0]
+                node['size'] = int(words[1], 16)
 
-            # Grab 32-bit address
-            address = int(line[0:8], 16)
+                """ Colmun(s) at the beginning of the line are fixed width.
+                """
 
-            # Decode the symbol formatting
-            if line[SymbolScope.index] == ord('l'):
-                symbol['scope'] = SymbolScope.local
-            elif line[SymbolScope.index] == ord('g'):
-                symbol['scope'] = SymbolScope.glb
-            elif line[SymbolScope.index] == ord('u'):
-                symbol['scope'] = SymbolScope.un_glb
-            elif line[SymbolScope.index] == ord('!'):
-                symbol['scope'] = SymbolScope.error
-            else:
-                symbol['scope'] = SymbolScope.none
+                """ The input file contains a collection of all symbols; data, 
+                    functions, etc...
+                """
+                if line[NodeType.index] == 'F':
+                    node['type'] = NodeType.function
+                elif line[NodeType.index] == 'O':
+                    node['type'] = NodeType.obj
+                elif line[NodeType.index] == ' ':
+                    # Functions implemented in assembly code get lumped in 
+                    # here. 
+                    if '.' in node['name']:
+                        # Discard, periods are not allowed in function names
+                        continue
+                    else:
+                        # TODO need to make section user definable
+                        if node['section'] != '.text':
+                            # Discard, invalid section
+                            continue
+                        else:
+                            node['type'] = NodeType.assembly
+                        
 
-            if line[SymbolMessage.index] == ord('W'):
-                symbol['message'] = SymbolMessage.warning
-            else:
-                symbol['message'] = SymbolMessage.none
+                else:
+                    # All other symbols for filename, debug info, etc... are
+                    # not guaranteed to have a unique address (key), and 
+                    # therefore cannot be logged. 
+                    continue
 
+                # Decode the symbol scope
+                if line[SymbolScope.index] == 'l':
+                    node['scope'] = SymbolScope.local
+                elif line[SymbolScope.index] == 'g':
+                    node['scope'] = SymbolScope.glb
+                elif line[SymbolScope.index] == 'u':
+                    node['scope'] = SymbolScope.un_glb
+                elif line[SymbolScope.index] == '!':
+                    node['scope'] = SymbolScope.error
+                else:
+                    node['scope'] = SymbolScope.none
 
-            """ The remainder of the columns are variable length word(s).
-            """
-            words = line[17:].split()
-            symbol['section'] = words[0]
-            symbol['size'] = int(words[1], 16)
-            try:
-                # Test, because some lines are missing the last field.
-                # Column width is 1 or more bytes
-                symbol['name'] = words[2:]
-            except IndexError:
-                # Column width is 0 bytes
-                symbol['name'] = ""
+                """ TODO delete
+                if line[SymbolMessage.index] == 'W':
+                    node['message'] = SymbolMessage.warning
+                else:
+                    node['message'] = SymbolMessage.none
 
-            symbols[address] = symbol
+                """
+
+                node['caller'] = []
+                node['branch'] = []
+
+                # Symbol address will become the node key, and therefore must
+                # be unique for each entry.
+                end = line.find(' ')
+                address = int(line[0:end], 16)
+
+                self.nodes[address] = node
         
         
+    def show_node_metrics(self):
+        """ Displays node summary information.
+        """
+        leaf_node = 0 # edge of tree
+        free_node = 0 # neither leaf or root, floating
+        root_node = 0 # base of tree
+        function_node = 0
+        filename = 0
+        obj_node = 0
+        assembly_node = 0
+        unknown_node = 0
+        
+        for key, node in self.nodes.items():
 
+            if node['type'] == NodeType.function:
+                function_node += 1
 
-def build_nodes(lines):
-    """ Returns a raw list of nodes. Upon completion each node knows who they
-        call.
-    """
-    nodes = {}
-    
-    in_progress = False
-    address = 0
-
-    for line in lines:
-        if is_function_start(line):
-            # New function detected
-            if in_progress:
-                # Log previous node
-                node['branch'] = branch
-                nodes[address] = node
-
-            in_progress = True
-            node = {}
-            branch = []
-            address = get_function_addr(line)
-            node['name'] = get_function_name(line)
-            node['type'] = NodeType.unknown
-            node['caller'] = []
-
-        elif is_branch(line) and in_progress:
-            # New branch detected, log callee
-            branch.append(get_branch(line) )
-
-    # Search is complete
-    if in_progress:
-        # Log last node detected
-        node['branch'] = branch
-        nodes[address] = node
-
-    return nodes
-
-def set_node_caller(nodes):
-    """ Upon entry, each node knows who they call.
-        Walk through the list and update each node with a list of who calls
-        them.
-    """
-    for caller, node in nodes.items():
-        for branch in node['branch']:
-            try:
-                nodes[branch]['caller'].append(caller)
-            except KeyError:
-                print("Missing node called by: " + node['name'])
-
-
-def set_node_info(symbols, nodes):
-    
-    for key, symbol in symbols.items():
-        if (symbol['type']) == SymbolType.function:
-            try:
-                nodes[key]['type'] = NodeType.function
-            except KeyError:
-                print("Missing function node: " + symbol['name'])
-
-
-
-
-def set_dispatch_tables(nodes, lines):
-    """ Upon entry, any free nodes (no caller or branch defined) are potential
-        dispatch tables containing function pointers. Locate dispatch tables
-        and create linkage between function nodes.
-    """
-    for key, node in nodes.items():
-        # Locate free nodes
-        if not node['branch'] and not node['caller']:
-            """ Found a free node.
+                if not node['caller']:
+                    root_node += 1
                 
-                Now locate any references to it,  indicating its a jump table
-            """
-            print(node)
+                if not node['branch']:
+                    leaf_node += 1
+                
+                if not node['branch'] and not node['caller']:
+                    free_node += 1
+
+            if node['type'] == NodeType.filename:
+                filename += 1
+
+            if node['type'] == NodeType.obj:
+                obj_node += 1
+
+            if node['type'] == NodeType.unknown:
+                unknown_node += 1
+            
+            if node['type'] == NodeType.assembly:
+                assembly_node += 1
+
+        print("\nFunction , total: " + str(function_node) )
+        print("Filename , total: " + str(filename) )
+        print("Object   , total: " + str(obj_node) )
+        print("Assembly , total: " + str(assembly_node))
+        print("Unknown  , total: " + str(unknown_node) )
+        print("All nodes, total: " + str(self.nodes.__len__()) )
+        print("\nRoot func, total: " + str(root_node) )
+        print("Leaf func, total: " + str(leaf_node) )
+        print("Free func, total: " + str(free_node) )
 
 
-def show_node_metrics(nodes):
-    """ Displays node summary information.
-    """
-    leaf_node = 0 # edge of tree
-    free_node = 0 # neither leaf or root, floating
-    root_node = 0 # base of tree
-    unknown_node = 0
-    
-    for key, node in nodes.items():
-        if not node['caller']:
-            root_node += 1
-        
-        if not node['branch']:
-            leaf_node += 1
-        
-        if not node['branch'] and not node['caller']:
-            free_node += 1
+    def link(self):
+        """ Updates an existing node list with a node's caller and branch list
+        """
+        lines = self.get_disassembly()
 
-        if node['type'] == NodeType.unknown:
-            unknown_node += 1
+        in_progress = False
+        address = 0
 
-    print("Root node, total: " + str(root_node) )
-    print("Leaf node, total: " + str(leaf_node) )
-    print("Free node, total: " + str(free_node) )
-    print("Unknown, total: " + str(unknown_node) )
-    print("All nodes, total: " + str(nodes.__len__()) )
+        for line in lines:
+            if is_function_start(line):
+                # New function detected
+                address = get_function_addr(line)
+                if ( address in self.nodes):
+                    in_progress = True
+                    self.nodes[address]['branch'] = []
+                else:
+                    in_progress = False
+                    print("Missing function: " + line)
 
+            elif is_branch(line) and in_progress:
+                # New branch detected
+                target = get_branch(line)
+                if ( target in self.nodes):
+                    self.nodes[address]['branch'].append(target)
+                    self.nodes[target]['caller'].append(address)
+                else:
+                    print("Missing branch: " + line)
 
-def build_call_tree(symbols, filename):
-    """ Analysis the binary input file and create linkage between symbols (i.e. 
-    call tree).
-    """
-    
-    terminal = subprocess.Popen([cmd, '--disassemble-all', '--demangle', 
-                        #'--start-address=0x08000000', 
-                        #'--stop-address=0x08001000',
-                        filename ], shell=True, 
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT)
-    stdout, stderr = terminal.communicate()
-    #stdout = literal_eval(stdout.decode('UTF-8'))
-    #lines = x.splitlines()
-    stdout = str(stdout, encoding='utf-8')
-    lines = stdout.splitlines()
-    #print(lines)
-
-    """ Start by parsing the file to discover all possible nodes (functions).
-        Initially, each node is assumed to be a root node. Next, build branches
-        by discovering which nodes are not a root node. When completed 
-        remaining list of root nodes are the starting point for each unique
-        branch in the tree.
-    """
-    nodes = {}
-    nodes = build_nodes(lines)
-    set_node_caller(nodes)
-    set_node_info(symbols, nodes)
-    #set_dispatch_tables(nodes, lines)
-
-    #delete_invalid_nodes()
-    #insert_vtables()
-    
-    #insert_stack_usage()
-    
-    #build_call_stacks(nodes)
-    #visualise_dict()
- 
-    show_node_metrics(nodes)
-
-    """ TODO implement long-term solution
-    """
-    with open( filename + '.json', 'w') as outfile:
-        json.dump(nodes, outfile, indent=4)
-    
 
 
 def main():
     print("Stack Checker")
     filename = validate_input()
-    
-    symbols = {}
-    build_symbol_table(symbols, filename)
 
-    #build_symbols(filename)
-    build_call_tree(symbols, filename)
-
+    nodes = Node(filename)
+    nodes.build()
+    nodes.link()
+    nodes.show_node_metrics()
+    nodes.save()
 
 
 if __name__ == "__main__":
