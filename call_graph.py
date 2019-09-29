@@ -42,40 +42,77 @@ cmd = tool_path + tool_prefix + command
 
 
 
-def is_valid_line(s):
-    """ Evaluates if a string can be converted to a hexadecimal number.
+def is_symbol_line(s):
+    """ Determines if the line contains a symbol
     """
-    try:
-        int(s[0:9], 16)
-        return True
-    except ValueError:
+    # A tab is the central reference point for slicing the line in later 
+    # operations. Verify it is present, and that only one exists per line.
+    qualifier1 = s.find('\t')
+    qualifier2 = s.rfind('\t')
+    if qualifier1 == -1 or qualifier1 != qualifier2:
         return False
+
+    return True
+
+def get_symbol_address(s):
+    """ Returns symbol address in decimal form
+        Must be qualified by calling is_symbol_line()
+    """
+    end = s.find(' ')
+    return int(s[0:end], 16)
+
 
 def get_symbol_name(s):
     """ Returns the name of the symbol
-        Must be qualified by calling is_valid_line()
+        Must be qualified by calling is_symbol_line()
     """
-    begin = s.find('\t', 17)
-    begin2 = s.find(' ', 17)
-    if begin2 > begin:
-        begin = begin2
-
-    begin = s.find(' ', begin)
-    begin += 1
+    begin = s.find('\t')
+    if begin != -1:
+        begin = s.find(' ', begin)
 
     if begin != -1:
+        begin += 1
         return s[begin:]
     
     return ""
 
+def get_symbol_section(s):
+    """ Returns the name of the section the symbol resides in
+        Must be qualified by calling is_symbol_line()
+    """
+    begin = -1
+    end = s.find('\t')
+    if end != -1:
+        begin = s.rfind(' ', 0, end)
+
+    if begin != -1:
+        begin += 1
+        return s[begin:end]
+
+    return ""
 
 
-def is_function_start(s):
-    """ Detects if the line indicates start of a new function
+def get_symbol_size(s):
+    """ Returns the size of memory (in bytes) the symbol represents
+        Must be qualified by calling is_symbol_line()
+    """
+    end = -1
+    begin = s.find('\t')
+    if begin != -1:
+        end = s.find(' ', begin)
+
+    if begin != -1 and end != -1:
+        begin += 1
+        return int(s[begin:end], 16)
+
+    return 0
+
+def is_node_start(s):
+    """ Detects if the line indicates start of a new noe
         valid:  123A <MySymbol>:
     """
     end = s.find(' ')
-    qualifier = s.endswith(':')
+    qualifier = s.endswith(':') and not('+0x' in s) and not('-0x' in s)
 
     if end != -1 and qualifier:
         try:
@@ -83,12 +120,11 @@ def is_function_start(s):
             return True
         except ValueError:
             return False
-
     return False
 
-def get_function_addr(s):
-    """ Returns the address of the function
-        Must be qualified by calling is_function_start()
+def get_node_address(s):
+    """ Returns the address of the node
+        Must be qualified by calling is_node_start()
     """
     end = s.find(' ')
 
@@ -97,20 +133,8 @@ def get_function_addr(s):
     except ValueError:
         return 0
 
-def get_function_name(s):
-    """ Returns the name of the function
-        Must be qualified by calling is_function_start()
-    """
-    begin = s.find('<')
-    end = s.rfind('>')
-
-    if begin != -1 and end != -1:
-        return s[begin + 1:end]
-    
-    return ""
-
-def is_branch(s):
-    """ Detects if the line contains a valid function call/branch
+def is_node_branch(s):
+    """ Detects if the line contains a valid node call/branch
         valid: ... 123A <MySymbol>
         invalid:  ... <MySymbol+0x23>  <--local branch
         invalid:  .... (123A <MySymbol>)   <--reference to variable
@@ -118,13 +142,14 @@ def is_branch(s):
     begin = s.find('<')
     
     if begin != -1 and s.endswith('>'):
-        if not('+0x' in s[begin:-1]) and not('-0x' in s[begin:-1]):
-            return ( get_branch(s) != -1 )
+        qualifier = not('+0x' in s[begin:-1]) and not('-0x' in s[begin:-1])
+        if qualifier:
+            return ( get_branch_address(s) != -1 )
     return False
 
-def get_branch(s):
-    """ Returns the address for the function called
-        Must be qualified by calling is_branch()
+def get_branch_address(s):
+    """ Returns the address for the branch
+        Must be qualified by calling is_node_branch()
     """
     begin = -1
     end = s.rfind(' <')
@@ -210,20 +235,13 @@ class Node():
 
         for line in lines:
             address = 0
-            if( is_valid_line(line[0:8]) ):
+            if( is_symbol_line(line) ):
                 node = {}
 
                 node['name'] = get_symbol_name(line)
 
-                """ These data columns are variable length word(s).
-                    TODO re-implement as method call to get string
-                """
-                words = line[17:].split()
-                node['section'] = words[0]
-                node['size'] = int(words[1], 16)
-
-                """ Colmun(s) at the beginning of the line are fixed width.
-                """
+                node['section'] = get_symbol_section(line)
+                node['size'] = get_symbol_size(line)
 
                 """ The input file contains a collection of all symbols; data, 
                     functions, etc...
@@ -278,9 +296,7 @@ class Node():
 
                 # Symbol address will become the node key, and therefore must
                 # be unique for each entry.
-                end = line.find(' ')
-                address = int(line[0:end], 16)
-
+                address = get_symbol_address(line)
                 self.nodes[address] = node
         
         
@@ -342,24 +358,22 @@ class Node():
         address = 0
 
         for line in lines:
-            if is_function_start(line):
-                # New function detected
-                address = get_function_addr(line)
+            if is_node_start(line):
+                # Start of node detected
+                address = get_node_address(line)
                 if ( address in self.nodes):
                     in_progress = True
                     self.nodes[address]['branch'] = []
                 else:
                     in_progress = False
-                    print("Missing function: " + line)
+                    print("Missing node: " + line)
 
-            elif is_branch(line) and in_progress:
-                # New branch detected
-                target = get_branch(line)
+            elif is_node_branch(line) and in_progress:
+                # Branch detected
+                target = get_branch_address(line)
                 if ( target in self.nodes):
                     self.nodes[address]['branch'].append(target)
                     self.nodes[target]['caller'].append(address)
-                else:
-                    print("Missing branch: " + line)
 
 
 
