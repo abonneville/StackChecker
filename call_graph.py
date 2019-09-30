@@ -167,6 +167,24 @@ def get_branch_address(s):
     else:
         return -1
 
+def is_dispatch_table(s):
+    """ Detect and validate the existence of a dispatch table
+    """
+    return False
+
+def get_pointer(s):
+    begin = s.find('\t')
+    end = s.find(' ', begin)
+
+    if begin != -1 and end != -1:
+        begin += 1
+        try:
+            return int(s[begin:end], 16)
+        except:
+            return -1
+    else:
+        return -1
+
 def validate_input():
     # initiate the parser
     parser = argparse.ArgumentParser()
@@ -356,17 +374,23 @@ class Node():
 
         in_progress = False
         address = 0
+        node_type  = NodeType.unknown
+
+        function = {} # list, link to reference table(s)
+        reference = {} # list,  link to dispatch table(s)
+        dispatch = {} # list, table of function pointers
 
         for line in lines:
             if is_node_start(line):
                 # Start of node detected
                 address = get_node_address(line)
                 if ( address in self.nodes):
+                    node_type = self.nodes[address]['type']
                     in_progress = True
                     self.nodes[address]['branch'] = []
                 else:
                     in_progress = False
-                    print("Missing node: " + line)
+                    # TODO log print("Missing node: " + line)
 
             elif is_node_branch(line) and in_progress:
                 # Branch detected
@@ -374,6 +398,64 @@ class Node():
                 if ( target in self.nodes):
                     self.nodes[address]['branch'].append(target)
                     self.nodes[target]['caller'].append(address)
+            elif node_type == NodeType.obj and in_progress:
+                # Evaluate for dispatch table entry(s)
+                target = get_pointer(line)
+                if target != -1:
+                    #target -= 1  #TODO specific to thumb-2 mode, read ELF first
+                    if ( target - 1 in self.nodes):
+                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
+                        dispatch.setdefault(address, []).append(target - 1)
+                    elif ( target in self.nodes):
+                        # Indirect reference table to the dispatch table
+                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
+                        reference.setdefault(address, []).append(target)
+
+
+            elif node_type == NodeType.function and in_progress:
+                # Evaluate for accessing dispatch table (function pointer)
+                target = get_pointer(line)
+                if target != -1:
+                    if ( target in self.nodes):
+                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
+                        function.setdefault(address, []).append(target)
+
+        #print(dispatch)
+
+        # Function link --> Reference Table --> Dispatch Table --> Function()
+        # TODO issue, cannot directly access initial offset value to determine
+        # which pointer is being accessed. Its in the disassembly code, but not
+        # a line descriptor. 
+        
+        """
+        for method, ref in function.items():
+            print(self.nodes[method]['name'])
+            for _ref in ref:
+                for _reference, xref in reference.items():
+                    if _ref == _reference:
+                        #print("i am here")
+                        #print(self.nodes[_reference]['name'])
+                        for _xref in xref:
+                            for _dispatch, ptr in dispatch.items():
+                                if _xref == _dispatch:
+                                    #if _ptr in self.nodes:
+                                    print("  " + self.nodes[method]['name'] + " --- " + self.nodes[_dispatch]['name'] + "  size: " + str( len(ptr)) )
+        """
+
+        """ For function pointers in the first degree and a dispatch table size 
+            of 1, the following will map simple function pointers.
+        """ 
+        node_count = 0
+        for _dispatch, ptr in dispatch.items():
+            for method, ref in function.items():
+                for _ref in ref:
+                    if _ref == _dispatch:
+                        node_count += 1
+                        print(self.nodes[method]['name'] + " --- " + self.nodes[_dispatch]['name'] + "  size: " + str( len(ptr)) )
+                        for _ptr in ptr:
+                            print("  " + self.nodes[_ptr]['name'] )
+        print("\nFunction pointers, 1st degree")
+        print("Matches: " + str(node_count) )
 
 
 
