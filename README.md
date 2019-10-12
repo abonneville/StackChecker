@@ -10,3 +10,7 @@ Overall goal is to implement a call graph that can compute stack usage for both 
 
 Reporting and visulationization has not started. A *.json file is being generated now, but it captures the internal node list generated from an *.elf binary.
 
+## References:
+* [Function Pointer Analysis for C Programs](https://pdfs.semanticscholar.org/54a3/f70d7d19d8be034d796e32516927e7aaa995.pdf)
+
+
