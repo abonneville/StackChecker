@@ -110,6 +110,31 @@ class LinkTestCase(unittest.TestCase):
         address = cg.get_node_address("08000000 <g_pfnVectors>:")
         self.assertEqual(address, 134217728)
 
+    def test_get_line_address(self):
+        # Terminator for line containing start of node
+        address = cg.get_line_address("8 <g_pfnVectors>:", ' ')
+        self.assertEqual(address, 8)
+
+        address = cg.get_line_address("08000000 <g_pfnVectors>:", ' ')
+        self.assertEqual(address, 134217728)
+
+        address = cg.get_line_address(" <g_pfnVectors>:", ' ')
+        self.assertEqual(address, 0)
+
+        # Alternate terminator for start of a line
+        address = cg.get_line_address(" 8:	0800074d 	stmdaeq	r0, {r0, r2, r3, r6, r8, r9, sl}", ':')
+        self.assertEqual(address, 8)
+
+        address = cg.get_line_address(" 80202f0:	0800074d 	stmdaeq	r0, {r0, r2, r3, r6, r8, r9, sl}", ':')
+        self.assertEqual(address, 134349552)
+
+        address = cg.get_line_address(" :	0800074d 	stmdaeq	r0, {r0, r2, r3, r6, r8, r9, sl}", ':')
+        self.assertEqual(address, 0)
+
+        address = cg.get_line_address(" 	0800074d 	stmdaeq	r0, {r0, r2, r3, r6, r8, r9, sl}", ':')
+        self.assertEqual(address, 0)
+
+
     def test_is_node_branch(self):
         
         result = cg.is_node_branch(" 800ab5e:	f7f6 fa6f 	bl	8001040 <xQueueGenericSend>")
