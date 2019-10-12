@@ -133,6 +133,19 @@ def get_node_address(s):
     except ValueError:
         return 0
 
+def get_line_address(s, terminator):
+    """ Returns the address at the start of the line
+        Must be qualified by calling is_node_start()
+    """
+    end = s.find(terminator)
+
+    try:
+        return int(s[0:end], 16)
+    except ValueError:
+        return 0
+
+
+
 def is_node_branch(s):
     """ Detects if the line contains a valid node call/branch
         valid: ... 123A <MySymbol>
@@ -167,11 +180,6 @@ def get_branch_address(s):
     else:
         return -1
 
-def is_dispatch_table(s):
-    """ Detect and validate the existence of a dispatch table
-    """
-    return False
-
 def get_pointer(s):
     begin = s.find('\t')
     end = s.find(' ', begin)
@@ -185,22 +193,6 @@ def get_pointer(s):
     else:
         return -1
 
-def validate_input():
-    # initiate the parser
-    parser = argparse.ArgumentParser()
-
-    """ Validate user input by verifying file can be opened, then close since this
-        script only needs the filename.
-    """
-    parser.add_argument('-i', '--infile', 
-                        help="input file, ELF format", metavar="FILE",
-                        type=argparse.FileType('r', encoding='UTF-8'), 
-                        required=True)
-
-    args = parser.parse_args()
-    args.infile.close()
-
-    return args.infile.name
 
 
 
@@ -209,9 +201,33 @@ class Node():
     """ Each node represents a function or object used in a call graph.
     """
     
-    def __init__(self, filename):
+    def __init__(self):
         self.nodes = {}
-        self.filename = filename
+        self.dispatch_table = {}
+        self.filename = ""
+        self.vector_table = ""
+
+    def validate_input(self):
+        # initiate the parser
+        parser = argparse.ArgumentParser()
+
+        parser.add_argument("-v", "--vector", help="set vector table for ISR")
+
+        """ Validate user input by verifying file can be opened, then close since this
+            script only needs the filename.
+        """
+        parser.add_argument('-i', '--infile', 
+                            help="input file, ELF format", metavar="FILE",
+                            type=argparse.FileType('r', encoding='UTF-8'), 
+                            required=True)
+
+        args = parser.parse_args()
+        args.infile.close()
+
+        if args.vector:
+            self.vector_table = args.vector
+
+        self.filename = args.infile.name
 
     def get_symbols(self):
         """ Creates a raw symbol list from the user provided input file
@@ -330,19 +346,20 @@ class Node():
         assembly_node = 0
         unknown_node = 0
         
-        for key, node in self.nodes.items():
+        for node in self.nodes.values():
 
             if node['type'] == NodeType.function:
                 function_node += 1
 
-                if not node['caller']:
-                    root_node += 1
-                
-                if not node['branch']:
-                    leaf_node += 1
-                
                 if not node['branch'] and not node['caller']:
                     free_node += 1
+
+                elif not node['caller']:
+                    root_node += 1
+                
+                elif not node['branch']:
+                    leaf_node += 1
+                
 
             if node['type'] == NodeType.filename:
                 filename += 1
@@ -366,11 +383,51 @@ class Node():
         print("Leaf func, total: " + str(leaf_node) )
         print("Free func, total: " + str(free_node) )
 
+    def set_dispatch(self, lines):
+        """ Evaluates all object nodes, if function poiners are found then
+            defines object as a dispatch table and records table entries.
+        """
+        in_progress = False
+
+        for line in lines:
+            table = {}
+            
+            if is_node_start(line):
+                # Start of node detected
+                address = get_node_address(line)
+                in_progress = False
+
+                if ( address in self.nodes):
+                    if self.nodes[address]['type'] == NodeType.obj:
+                        in_progress = True
+
+            elif in_progress:
+                # Evaluate for dispatch table entry(s)
+                target = get_pointer(line)
+                if target != -1:
+                    if ( target in self.nodes):
+                        if self.nodes[target]['type'] == NodeType.function:
+                            # ARM state
+                            table['function'] = target
+                            table['table'] = address
+                            line_address = get_line_address(line, ':')
+                            self.dispatch_table[line_address] = table
+                    elif ( target - 1 in self.nodes):
+                        if self.nodes[target - 1]['type'] == NodeType.function:
+                            # Thumb state
+                            table['function'] = target - 1
+                            table['table'] = address
+                            line_address = get_line_address(line, ':')
+                            self.dispatch_table[line_address] = table
+
+
 
     def link(self):
         """ Updates an existing node list with a node's caller and branch list
         """
         lines = self.get_disassembly()
+
+        self.set_dispatch(lines)
 
         in_progress = False
         address = 0
@@ -379,6 +436,7 @@ class Node():
         function = {} # list, link to reference table(s)
         reference = {} # list,  link to dispatch table(s)
         dispatch = {} # list, table of function pointers
+        dispatch_table = {}
 
         for line in lines:
             if is_node_start(line):
@@ -398,27 +456,51 @@ class Node():
                 if ( target in self.nodes):
                     self.nodes[address]['branch'].append(target)
                     self.nodes[target]['caller'].append(address)
+            
             elif node_type == NodeType.obj and in_progress:
                 # Evaluate for dispatch table entry(s)
                 target = get_pointer(line)
                 if target != -1:
-                    #target -= 1  #TODO specific to thumb-2 mode, read ELF first
-                    if ( target - 1 in self.nodes):
-                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
-                        dispatch.setdefault(address, []).append(target - 1)
-                    elif ( target in self.nodes):
+                    if ( target in self.dispatch_table):
                         # Indirect reference table to the dispatch table
                         #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
                         reference.setdefault(address, []).append(target)
+                    elif ( target - 1 in self.nodes):
+                        #target -= 1  #TODO specific to thumb-2 mode, read ELF first
+                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
+                        dispatch.setdefault(address, []).append(target - 1)
+                        
+                        line_address = get_line_address(line, ':')
+                        dispatch_table[line_address] = target - 1
 
 
             elif node_type == NodeType.function and in_progress:
                 # Evaluate for accessing dispatch table (function pointer)
                 target = get_pointer(line)
                 if target != -1:
+                    if target in self.dispatch_table:
+                        # ARM state
+                        function.setdefault(address, []).append(target)
+                    elif target - 1 in self.nodes:
+                        # Thumb state
+                        pass
+                        # TODO Valid function ptr calls defined and invoked at runtime, not compile time
+                        #if self.nodes[target - 1]['type'] == NodeType.function:
+                            # print(self.nodes[address]['name'] + " --- " + self.nodes[target - 1]['name'])
+                            #function.setdefault(address, []).append(target + 1)
+
+                    """
                     if ( target in self.nodes):
+                        # ARM state
                         #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
                         function.setdefault(address, []).append(target)
+                    elif ( target + 1 in self.nodes):
+                        # Thumb state
+                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
+                        function.setdefault(address, []).append(target + 1)
+                    else:
+                        # Evaluate if 
+                    """
 
         #print(dispatch)
 
@@ -439,12 +521,13 @@ class Node():
                             for _dispatch, ptr in dispatch.items():
                                 if _xref == _dispatch:
                                     #if _ptr in self.nodes:
-                                    print("  " + self.nodes[method]['name'] + " --- " + self.nodes[_dispatch]['name'] + "  size: " + str( len(ptr)) )
+                                    print("  " + self.nodes[_ref]['name'] + " --- " + self.nodes[_dispatch]['name'] + "  size: " + str( len(ptr)) )
         """
 
         """ For function pointers in the first degree and a dispatch table size 
             of 1, the following will map simple function pointers.
         """ 
+        """
         node_count = 0
         for _dispatch, ptr in dispatch.items():
             for method, ref in function.items():
@@ -456,14 +539,55 @@ class Node():
                             print("  " + self.nodes[_ptr]['name'] )
         print("\nFunction pointers, 1st degree")
         print("Matches: " + str(node_count) )
+        """
 
+        """ For function pointers in the first degree and a dispatch table size 
+            of 1, the following will map simple function pointers.
+        """ 
+        
+        node_count = 0
+        for method, ref in function.items():
+            for _ref in ref:
+                    if _ref in self.dispatch_table:
+                        node_count += 1
+                        ptr = self.dispatch_table[_ref]
+                        print(self.nodes[method]['name'] + " --- " + self.nodes[ptr['table'] ]['name'] + " " + str(self.nodes[ptr['table'] ]['size']) )
+                        print("  " + self.nodes[ptr['function'] ]['name'] )
+                    else:
+                        print("\n **** Error: unable to find entry in dispatch table **** \n")
 
+        print("\nFunction pointers")
+        print("References, 1st Degree: " + str(node_count) )
+        print("All, total: " + str(self.dispatch_table.__len__()) )
+
+        print("References, 2nd degree")
+        for key, table in reference.items():
+            print(self.nodes[key]['name'] + " --- " ) #+ self.nodes[table[0]]['name'])
+
+        #print("All function pointers")
+        #for key, ptr in self.dispatch_table.items():
+        #    print(self.nodes[ ptr['table'] ]['name'] + " ---- " + self.nodes[ ptr['function'] ]['name'])
+
+        """ Display all dispatch tables and associated function pointers
+        """
+        """
+        node_count = 0
+        unique_nodes = {}
+        for _dispatch, ptr in dispatch.items():
+            print(self.nodes[_dispatch]['name'])
+            for _ptr in ptr:
+                if not _ptr in unique_nodes:
+                    unique_nodes[_ptr] = 0
+                    node_count += 1
+                print("  " + self.nodes[_ptr]['name'] )
+        print("\nUnique function pointers, total " + str(node_count) )
+        """
 
 def main():
     print("Stack Checker")
-    filename = validate_input()
 
-    nodes = Node(filename)
+    nodes = Node()
+    nodes.validate_input()
     nodes.build()
     nodes.link()
     nodes.show_node_metrics()
