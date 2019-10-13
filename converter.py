@@ -61,9 +61,31 @@ class Converter:
     def save(self):
         """ Save the internal call graph to file
         """
+        print("Saving to file...", end="", flush=True)
         with open( self.filename + '.json', 'w') as outfile:
             json.dump(self.call_graph, outfile, indent=4)
+        print("done.")
 
+    def insert_branch_node(self, parent, level, child, recursion = False):
+        """ Inserts a child (branch) node into its parent, nested dictionary
+        """
+        parent[level][child] = self.nodes[child].copy()
+        del parent[level][child]['branch']
+        del parent[level][child]['root']
+        parent[level][child]['level'] = level + 1
+        parent[level][child]['recursion'] = recursion
+
+        if recursion == True:
+            # Recursion detected. Tag the branch all the way back to the root 
+            # node
+            for index in range(0, level + 1):
+                parent[index]['recursion'] = True
+        
+        # TODO optimize, saving a redundant address inside the node
+        # for use when assessing for recursion. Work around, because the
+        # reference object does not have access to the node's key which is the
+        # same value.
+        parent[level][child]['address'] = child 
 
     def to_call_list(self):
         """ Generate an interal representation of a call graph
@@ -71,7 +93,8 @@ class Converter:
         # For each root node, generate a call graph
         for key, node in self.nodes.items():
             if node['type'] == NodeType.function:
-                #if key == 134272696: # TODO remove, used for debugging
+            #if key == 134272696: # TODO remove, single branch with one direct regression
+            #if key == 134342576: # TODO remove, multi-branch with one direct regression
                 if node['root']:
                     # Found a root node
                     #print("Level: 0 " + node['name']) # TODO remove
@@ -87,6 +110,7 @@ class Converter:
                     del space[level]['root']
                     space[level]['level'] = level
                     space[level]['address'] = key
+                    space[level]['recursion'] = False
 
                     while ( queue[level] or level > 0):
                         if not queue[level]:
@@ -95,44 +119,48 @@ class Converter:
                             level -= 1
                             continue
 
-                        # Extract a node and traverse
+                        # Extract a node for traversing
                         _branch = queue[level].pop(0)
                         #print("Level: " + str(level + 1) + " " + self.nodes[_branch]['name']) # TODO remove
+                        
+                        # Insert child node into parent node
+                        self.insert_branch_node(space, level, _branch)
 
-                        space[level][_branch] = self.nodes[_branch].copy()
-                        del space[level][_branch]['branch']
-                        del space[level][_branch]['root']
-                        space[level][_branch]['level'] = level + 1
-                        space[level][_branch]['address'] = _branch # Used for recursion, TODO optimize
-
+                        # Does the child node branch anywere
                         if self.nodes[_branch]['branch']:
                             # Edge node detected.
                             
                             # Check for direct or indirect recursion
-                            is_recursion = False
-                            if level > 0:
-                                for __branch in self.nodes[_branch]['branch']:
-                                    for key in range(0,level):
-                                        if __branch == space[key]['address']:
-                                            # Recursion detected
-                                            # TODO need to insert into object for reporting
-                                            print("    Recursion - " + self.nodes[__branch]['name'])
-                                            is_recursion = True
-                                            break
-                                    else:
-                                        continue  # only executed if the inner loop did NOT break
-                                    break  # only executed if the inner loop DID break
+                            is_queued = False
+                            queue[level + 1] = []
+                            for __branch in self.nodes[_branch]['branch']:
+                                is_recursion = False
+                                for key in range(0,level + 1):
+                                    if __branch == space[key]['address']:
+                                        # Recursion detected
+                                        is_recursion = True
 
-                            if not is_recursion:
-                                # Save new branch list for traversing
-                                level += 1
-                                queue[level] = self.nodes[_branch]['branch'].copy()
+                                        # Insert recursion branch directly into parent node, without traversing
+                                        self.insert_branch_node(space, level, __branch, is_recursion)
+                                        break
+                                if not is_recursion:
+                                    # Save new branch for traversing
+                                    # TODO corner case, with multi-branch list and recursion is the first branch,
+                                    # an extra sub-branch under the recursion branch gets assessed. This occurs
+                                    # because if its direct recurssion, both the parent key and child key match. The
+                                    # non-recurssion branch(s) get inserted under the child instead of the parent.
+                                    # Example node: _reclaim_reent -> cleanup_glue, cleanup_glue calls itself as the
+                                    # first branch
+                                    is_queued = True
+                                    queue[level + 1].append(__branch)
 
+                            if is_queued:
                                 # Setup new reference to the last object inserted
+                                level += 1
                                 space[level] = space[level - 1][_branch]
 
                             elif not queue[level]:
-                                # Recursion detected.
+                                # Recursion detected, treat as leaf node.
                                 # Step back one level and resume traversing
                                 if level > 0:
                                     level -= 1

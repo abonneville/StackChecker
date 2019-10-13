@@ -36,7 +36,7 @@ def j_tree(tree, parent, dic):
     for key, field in dic.items():
         uid = uuid.uuid4()
         if isinstance(dic[key], dict):
-            tree.insert(parent, 'end', uid, text=field['name'], value=(field['level'], field['size']))
+            tree.insert(parent, 'end', uid, text=field['name'], value=(field['level'], field['recursion']))
             j_tree(tree, uid, dic[key])
         """
         elif isinstance(dic[key], tuple):
@@ -69,9 +69,9 @@ def tk_tree_view(data):
     tree_frame.grid(row=0, column=0, sticky=tk.NSEW)
 
     # Setup the Tree
-    tree = ttk.Treeview(tree_frame, columns=('Level', 'Size'))
-    tree.column('Size', width=50, anchor='center')
-    tree.heading('Size', text='Size')
+    tree = ttk.Treeview(tree_frame, columns=('Level', 'Recursion'))
+    tree.column('Recursion', width=50, anchor='center')
+    tree.heading('Recursion', text='Recursion')
 
     tree.column('Level', width=50, anchor='center')
     tree.heading('Level', text='Level')
