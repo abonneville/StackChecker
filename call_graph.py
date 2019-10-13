@@ -454,8 +454,10 @@ class Node():
                 # Branch detected
                 target = get_branch_address(line)
                 if ( target in self.nodes):
-                    self.nodes[address]['branch'].append(target)
-                    self.nodes[target]['caller'].append(address)
+                    if ( not target in self.nodes[address]['branch'] ):
+                        # For optimization, we only record unique branches
+                        self.nodes[address]['branch'].append(target)
+                        self.nodes[target]['caller'].append(address)
             
             elif node_type == NodeType.obj and in_progress:
                 # Evaluate for dispatch table entry(s)
