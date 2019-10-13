@@ -325,7 +325,7 @@ class Node():
 
                 """
 
-                node['caller'] = []
+                node['root'] = True
                 node['branch'] = []
 
                 # Symbol address will become the node key, and therefore must
@@ -351,10 +351,10 @@ class Node():
             if node['type'] == NodeType.function:
                 function_node += 1
 
-                if not node['branch'] and not node['caller']:
+                if not node['branch'] and node['root']:
                     free_node += 1
 
-                elif not node['caller']:
+                elif node['root']:
                     root_node += 1
                 
                 elif not node['branch']:
@@ -423,7 +423,7 @@ class Node():
 
 
     def link(self):
-        """ Updates an existing node list with a node's caller and branch list
+        """ Updates an existing node list with a node's branch list
         """
         lines = self.get_disassembly()
 
@@ -457,7 +457,7 @@ class Node():
                     if ( not target in self.nodes[address]['branch'] ):
                         # For optimization, we only record unique branches
                         self.nodes[address]['branch'].append(target)
-                        self.nodes[target]['caller'].append(address)
+                        self.nodes[target]['root'] = False
             
             elif node_type == NodeType.obj and in_progress:
                 # Evaluate for dispatch table entry(s)

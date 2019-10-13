@@ -68,11 +68,11 @@ class Converter:
     def to_call_list(self):
         """ Generate an interal representation of a call graph
         """
-        # For each root node (no caller), generate a call graph
+        # For each root node, generate a call graph
         for key, node in self.nodes.items():
             if node['type'] == NodeType.function:
                 #if key == 134272696: # TODO remove, used for debugging
-                if not node['caller']:
+                if node['root']:
                     # Found a root node
                     #print("Level: 0 " + node['name']) # TODO remove
                     level = 0
@@ -84,7 +84,7 @@ class Converter:
                     space = {}
                     space[level] = self.call_graph[key]
                     del space[level]['branch']
-                    del space[level]['caller']
+                    del space[level]['root']
                     space[level]['level'] = level
                     space[level]['address'] = key
 
@@ -101,7 +101,7 @@ class Converter:
 
                         space[level][_branch] = self.nodes[_branch].copy()
                         del space[level][_branch]['branch']
-                        del space[level][_branch]['caller']
+                        del space[level][_branch]['root']
                         space[level][_branch]['level'] = level + 1
                         space[level][_branch]['address'] = _branch # Used for recursion, TODO optimize
 
