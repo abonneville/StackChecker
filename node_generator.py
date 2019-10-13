@@ -10,6 +10,8 @@ from enum import auto, IntEnum
 
 import subprocess, sys
 
+from pathlib import Path
+
 
 class SymbolScope(IntEnum):
     index = 9
@@ -258,7 +260,8 @@ class Node():
     def save(self):
         """ Save all nodes to file
         """
-        with open( self.filename + '.json', 'w') as outfile:
+        fn = Path(self.filename)
+        with open( fn.with_suffix('.node.json'), 'w') as outfile:
             json.dump(self.nodes, outfile, indent=4)
 
 
