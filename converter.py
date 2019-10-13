@@ -5,7 +5,7 @@
 """
 import argparse
 import json
-from call_graph import NodeType
+from node_generator import NodeType
 
 from graphviz import Digraph
 
