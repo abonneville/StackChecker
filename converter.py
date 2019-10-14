@@ -6,6 +6,7 @@
 import argparse
 import json
 from node_generator import NodeType
+from pathlib import Path
 
 from graphviz import Digraph
 
@@ -61,8 +62,14 @@ class Converter:
     def save(self):
         """ Save the internal call graph to file
         """
+        # Typical input filename would be 'something.node.json'
+        # Expected output filename will be 'something.graph.json'
+        fn = Path(self.filename)
+        fn = fn.with_suffix('') # Remove '.json'
+        fn = fn.with_suffix('.graph.json') # Replace '.node'
+
         print("Saving to file...", end="", flush=True)
-        with open( self.filename + '.json', 'w') as outfile:
+        with open( fn, 'w') as outfile:
             json.dump(self.call_graph, outfile, indent=4)
         print("done.")
 
