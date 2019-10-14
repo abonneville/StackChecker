@@ -263,6 +263,7 @@ class Node():
         fn = Path(self.filename)
         with open( fn.with_suffix('.node.json'), 'w') as outfile:
             json.dump(self.nodes, outfile, indent=4)
+        outfile.close()
 
 
     def build(self):
