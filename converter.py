@@ -32,16 +32,9 @@ def validate_input():
 
 def jsonKeys2int(x):
     """ JSON stores integer keys as a string. This method converts string
-        back to integer key
+        back to integer key. Supports flat and nested dictionaries
     """
-    if isinstance(x, dict):
-        try:
-            # Key is an integer
-            return {int(k):v for k,v in x.items()}
-        except:
-            # Key is a string
-            return x
-    return x
+    return {int(k) if k.lstrip('-').isdigit() else k: v for k, v in x.items()}
 
 
 class Converter:
@@ -57,7 +50,8 @@ class Converter:
         """
         with open(self.filename, 'r') as handle:
             self.nodes = json.load(handle, object_hook=jsonKeys2int)
-            print("Number of nodes loaded: " + str(len(self.nodes)) )
+        handle.close()
+        print("Number of nodes loaded: " + str(len(self.nodes)) )
 
     def save(self):
         """ Save the internal call graph to file
@@ -71,6 +65,7 @@ class Converter:
         print("Saving to file...", end="", flush=True)
         with open( fn, 'w') as outfile:
             json.dump(self.call_graph, outfile, indent=4)
+        outfile.close()
         print("done.")
 
     def insert_branch_node(self, parent, level, child, recursion = False):
