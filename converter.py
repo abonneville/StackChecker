@@ -7,8 +7,15 @@ import argparse
 import json
 from node_generator import NodeType
 from pathlib import Path
+from enum import auto, Enum
 
 from graphviz import Digraph
+
+
+class RecursionType(Enum):
+    none = auto()
+    direct = auto()
+    indirect = auto()
 
 
 def validate_input():
@@ -17,8 +24,7 @@ def validate_input():
     # initiate the parser
     parser = argparse.ArgumentParser()
 
-    """ Validate user input by verifying file can be opened, then close since this
-        script only needs the filename.
+    """ Validate user input by verifying file can be opened.
     """
     parser.add_argument('-i', '--infile', 
                         help="input file, JSON format", metavar="FILE",
@@ -51,7 +57,7 @@ class Converter:
         with open(self.filename, 'r') as handle:
             self.nodes = json.load(handle, object_hook=jsonKeys2int)
         handle.close()
-        print("Number of nodes loaded: " + str(len(self.nodes)) )
+        print("Number of nodes loaded: " + str(len(self.nodes)) )        
 
     def save(self):
         """ Save the internal call graph to file
@@ -68,26 +74,30 @@ class Converter:
         outfile.close()
         print("done.")
 
-    def insert_branch_node(self, parent, level, child, recursion = False):
+    def insert_branch_node(self, parent, level, child, recursion=RecursionType.none):
         """ Inserts a child (branch) node into its parent, nested dictionary
         """
-        parent[level][child] = self.nodes[child].copy()
-        del parent[level][child]['branch']
-        del parent[level][child]['root']
-        parent[level][child]['level'] = level + 1
-        parent[level][child]['recursion'] = recursion
-
-        if recursion == True:
-            # Recursion detected. Tag the branch all the way back to the root 
-            # node
+        if recursion != RecursionType.direct:
+            parent[level][child] = self.nodes[child].copy()
+            del parent[level][child]['branch']
+            del parent[level][child]['root']
+            parent[level][child]['level'] = level + 1
+            # TODO optimize, saving a redundant address inside the node
+            # for use when assessing for recursion. Work around, because the
+            # reference object does not have access to the node's key which is the
+            # same value.
+            parent[level][child]['address'] = child
+            if recursion == RecursionType.none:
+                parent[level][child]['recursion'] = False
+            else:
+                parent[level][child]['recursion'] = True
+        
+        if recursion != RecursionType.none:
+            # Tag the active call path all the back to the root node with 
+            # attribute 'recursion' set to True
             for index in range(0, level + 1):
                 parent[index]['recursion'] = True
-        
-        # TODO optimize, saving a redundant address inside the node
-        # for use when assessing for recursion. Work around, because the
-        # reference object does not have access to the node's key which is the
-        # same value.
-        parent[level][child]['address'] = child 
+
 
     def to_call_list(self):
         """ Generate an interal representation of a call graph
@@ -105,7 +115,7 @@ class Converter:
                     queue[level] = node['branch'].copy()
 
                     # Record root node
-                    self.call_graph[key] = node
+                    self.call_graph[key] = node.copy()
                     space = {}
                     space[level] = self.call_graph[key]
                     del space[level]['branch']
@@ -133,36 +143,52 @@ class Converter:
                             # Edge node detected.
                             
                             # Check for direct or indirect recursion
-                            is_queued = False
+                            recursion = RecursionType.none
                             queue[level + 1] = []
                             for __branch in self.nodes[_branch]['branch']:
-                                is_recursion = False
+                                recursion = RecursionType.none
                                 for key in range(0,level + 1):
                                     if __branch == space[key]['address']:
                                         # Recursion detected
-                                        is_recursion = True
+                                        if ( __branch == _branch ):
+                                            recursion = RecursionType.direct
+                                        else:
+                                            recursion = RecursionType.indirect
 
-                                        # Insert recursion branch directly into parent node, without traversing
-                                        self.insert_branch_node(space, level, __branch, is_recursion)
-                                        break
-                                if not is_recursion:
-                                    # Save new branch for traversing
-                                    # TODO corner case, with multi-branch list and recursion is the first branch,
-                                    # an extra sub-branch under the recursion branch gets assessed. This occurs
-                                    # because if its direct recurssion, both the parent key and child key match. The
-                                    # non-recurssion branch(s) get inserted under the child instead of the parent.
-                                    # Example node: _reclaim_reent -> cleanup_glue, cleanup_glue calls itself as the
-                                    # first branch
-                                    is_queued = True
-                                    queue[level + 1].append(__branch)
+                                        # Insert recursion branch 
+                                        # directly into parent node, without traversing
+                                        # 1. Advance reference to parent node
+                                        # 2. Insert recursion branch
+                                        # 3. Reset reference back to original state
+                                        level += 1
+                                        space[level] = space[level - 1][_branch]
 
-                            if is_queued:
+                                        self.insert_branch_node(space, level, __branch, recursion)
+                                        
+                                        level -= 1
+
+                                        # For direct recursion, branch path(s)
+                                        # have already been analysed. Discard
+                                        # pending information.
+                                        if ( recursion == RecursionType.direct ):
+                                            queue[level + 1] = []
+                                            break
+
+                                else:
+                                    if recursion == RecursionType.none:
+                                        # Save new branch for traversing
+                                        queue[level + 1].append(__branch)
+                                    continue  # only executed if the inner loop did NOT break
+                                break  # only executed if the inner loop DID break
+
+
+                            if recursion != RecursionType.direct:
                                 # Setup new reference to the last object inserted
                                 level += 1
                                 space[level] = space[level - 1][_branch]
 
-                            elif not queue[level]:
-                                # Recursion detected, treat as leaf node.
+                            else:
+                                # Direct recursion detected, treat as leaf node.
                                 # Step back one level and resume traversing
                                 if level > 0:
                                     level -= 1
@@ -192,7 +218,7 @@ class Converter:
 
 
 def main():
-    print("Format converter")
+    print("Converter")
     filename = validate_input()
 
     nodes = Converter(filename)
