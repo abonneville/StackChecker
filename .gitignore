@@ -1,7 +1,6 @@
 .vscode/
 
 *.txt
-*.json
 *.elf
 *.bat
 *.pyc
