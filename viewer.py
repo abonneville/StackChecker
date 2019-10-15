@@ -8,8 +8,6 @@ import uuid
 import tkinter as tk
 from tkinter import ttk
 
-import test
-
 class Viewer:
     """ Displays a call graph from a nested dictionary
     """
@@ -22,6 +20,7 @@ class Viewer:
         """
         with open(self.filename, 'r') as handle:
             self.call_stacks = json.load(handle)
+        handle.close()
 
 
     def show(self):
@@ -38,21 +37,6 @@ def j_tree(tree, parent, dic):
         if isinstance(dic[key], dict):
             tree.insert(parent, 'end', uid, text=field['name'], value=(field['level'], field['recursion']))
             j_tree(tree, uid, dic[key])
-        """
-        elif isinstance(dic[key], tuple):
-            tree.insert(parent, 'end', uid, text=str(key) + '()')
-            j_tree(tree, uid,
-                   dict([(i, x) for i, x in enumerate(dic[key])]))
-        elif isinstance(dic[key], list):
-            tree.insert(parent, 'end', uid, text=str(key) + '[]')
-            j_tree(tree, uid,
-                   dict([(i, x) for i, x in enumerate(dic[key])]))
-        else:
-            value = dic[key]
-            if isinstance(value, str):
-                value = value.replace(' ', '_')
-            tree.insert(parent, 'end', uid, text=key, value=value)
-        """
 
 
 def tk_tree_view(data):
@@ -60,7 +44,7 @@ def tk_tree_view(data):
     """
     # Setup the root UI
     root = tk.Tk()
-    root.title("tk_tree_view")
+    root.title("Call Graph")
     root.columnconfigure(0, weight=1)
     root.rowconfigure(0, weight=1)
 
@@ -69,19 +53,36 @@ def tk_tree_view(data):
     tree_frame.grid(row=0, column=0, sticky=tk.NSEW)
 
     # Setup the Tree
-    tree = ttk.Treeview(tree_frame, columns=('Level', 'Recursion'))
-    tree.column('Recursion', width=50, anchor='center')
-    tree.heading('Recursion', text='Recursion')
+    style = ttk.Style()
+    style.configure("mystyle.Treeview", highlightthickness=0, bd=0, font=('Calibri', 11)) # Modify the font of the body
+    style.configure("mystyle.Treeview.Heading", font=('Calibri', 13,'bold')) # Modify the font of the headings
+    #style.layout("mystyle.Treeview", [('mystyle.Treeview.treearea', {'sticky': 'nswe'})]) # Remove the borders
 
-    tree.column('Level', width=50, anchor='center')
-    tree.heading('Level', text='Level')
+    tree = ttk.Treeview(tree_frame, selectmode='browse', style="mystyle.Treeview")
+    
+    tree['columns'] = ('1', '2')
+    tree.column('#0', width=100, anchor=tk.W)
+    tree.column('1', width=40, anchor=tk.CENTER)
+    tree.column('2', width=40, anchor=tk.CENTER)
 
+    tree.heading('#0', text='Function Name', anchor=tk.W)
+    tree.heading('1', text='Level')
+    tree.heading('2', text='Recursion')
+
+    # attach a Vertical (y) scrollbar to the frame
+    vsb = ttk.Scrollbar(tree_frame, orient='vertical')
+    vsb.configure(command=tree.yview)
+    vsb.pack(side='right', fill='y')
+    tree.configure(yscrollcommand=vsb.set)
+
+
+    # Fill tree with data
     j_tree(tree, '', data)
     tree.pack(fill=tk.BOTH, expand=1)
 
     # Limit windows minimum dimensions
     root.update_idletasks()
-    root.minsize(root.winfo_reqwidth(), root.winfo_reqheight())
+    root.minsize(2 * root.winfo_reqwidth(), root.winfo_reqheight())
     root.mainloop()
 
 def validate_input():
