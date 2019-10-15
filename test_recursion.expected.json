@@ -1,0 +1,232 @@
+{
+    "1002": {
+        "name": "FuncB",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "level": 0,
+        "address": 1002,
+        "recursion": true,
+        "1001": {
+            "name": "FuncA",
+            "section": ".text",
+            "size": 0,
+            "type": 17,
+            "scope": 11,
+            "level": 1,
+            "address": 1001,
+            "recursion": false,
+            "1006": {
+                "name": "FuncF",
+                "section": ".text",
+                "size": 0,
+                "type": 17,
+                "scope": 11,
+                "level": 2,
+                "address": 1006,
+                "recursion": false
+            }
+        },
+        "1003": {
+            "name": "FuncC",
+            "section": ".text",
+            "size": 0,
+            "type": 17,
+            "scope": 11,
+            "level": 1,
+            "address": 1003,
+            "recursion": true,
+            "1004": {
+                "name": "FuncD",
+                "section": ".text",
+                "size": 0,
+                "type": 17,
+                "scope": 11,
+                "level": 2,
+                "address": 1004,
+                "recursion": true,
+                "1005": {
+                    "name": "FuncE",
+                    "section": ".text",
+                    "size": 0,
+                    "type": 17,
+                    "scope": 11,
+                    "level": 3,
+                    "address": 1005,
+                    "recursion": true,
+                    "1004": {
+                        "name": "FuncD",
+                        "section": ".text",
+                        "size": 0,
+                        "type": 17,
+                        "scope": 11,
+                        "level": 4,
+                        "address": 1004,
+                        "recursion": true
+                    },
+                    "1001": {
+                        "name": "FuncA",
+                        "section": ".text",
+                        "size": 0,
+                        "type": 17,
+                        "scope": 11,
+                        "level": 4,
+                        "address": 1001,
+                        "recursion": false,
+                        "1006": {
+                            "name": "FuncF",
+                            "section": ".text",
+                            "size": 0,
+                            "type": 17,
+                            "scope": 11,
+                            "level": 5,
+                            "address": 1006,
+                            "recursion": false
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "2002": {
+        "name": "FuncB-2",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "level": 0,
+        "address": 2002,
+        "recursion": true,
+        "2001": {
+            "name": "FuncA-2",
+            "section": ".text",
+            "size": 0,
+            "type": 17,
+            "scope": 11,
+            "level": 1,
+            "address": 2001,
+            "recursion": false,
+            "2006": {
+                "name": "FuncF-2",
+                "section": ".text",
+                "size": 0,
+                "type": 17,
+                "scope": 11,
+                "level": 2,
+                "address": 2006,
+                "recursion": false
+            }
+        },
+        "2003": {
+            "name": "FuncC-2",
+            "section": ".text",
+            "size": 0,
+            "type": 17,
+            "scope": 11,
+            "level": 1,
+            "address": 2003,
+            "recursion": true,
+            "2004": {
+                "name": "FuncD-2",
+                "section": ".text",
+                "size": 0,
+                "type": 17,
+                "scope": 11,
+                "level": 2,
+                "address": 2004,
+                "recursion": true,
+                "2005": {
+                    "name": "FuncE-2",
+                    "section": ".text",
+                    "size": 0,
+                    "type": 17,
+                    "scope": 11,
+                    "level": 3,
+                    "address": 2005,
+                    "recursion": true,
+                    "2001": {
+                        "name": "FuncA-2",
+                        "section": ".text",
+                        "size": 0,
+                        "type": 17,
+                        "scope": 11,
+                        "level": 4,
+                        "address": 2001,
+                        "recursion": false,
+                        "2006": {
+                            "name": "FuncF-2",
+                            "section": ".text",
+                            "size": 0,
+                            "type": 17,
+                            "scope": 11,
+                            "level": 5,
+                            "address": 2006,
+                            "recursion": false
+                        }
+                    },
+                    "2005": {
+                        "name": "FuncE-2",
+                        "section": ".text",
+                        "size": 0,
+                        "type": 17,
+                        "scope": 11,
+                        "level": 4,
+                        "address": 2005,
+                        "recursion": true
+                    }
+                }
+            }
+        }
+    },
+    "3001": {
+        "name": "FuncA-3",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "level": 0,
+        "address": 3001,
+        "recursion": true,
+        "3001": {
+            "name": "FuncA-3",
+            "section": ".text",
+            "size": 0,
+            "type": 17,
+            "scope": 11,
+            "level": 1,
+            "address": 3001,
+            "recursion": true
+        }
+    },
+    "4001": {
+        "name": "FuncA-4",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "level": 0,
+        "address": 4001,
+        "recursion": true,
+        "4002": {
+            "name": "FuncB-4",
+            "section": ".text",
+            "size": 0,
+            "type": 17,
+            "scope": 11,
+            "level": 1,
+            "address": 4002,
+            "recursion": true,
+            "4002": {
+                "name": "FuncB-4",
+                "section": ".text",
+                "size": 0,
+                "type": 17,
+                "scope": 11,
+                "level": 2,
+                "address": 4002,
+                "recursion": true
+            }
+        }
+    }
+}
