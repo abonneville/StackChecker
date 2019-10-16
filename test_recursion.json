@@ -1,0 +1,167 @@
+{
+    "1001": {
+        "name": "FuncA",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            1006
+        ]
+    },
+    "1002": {
+        "name": "FuncB",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": true,
+        "branch": [
+            1001,
+            1003
+        ]
+    },
+    "1003": {
+        "name": "FuncC",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            1004
+        ]
+    },
+    "1004": {
+        "name": "FuncD",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            1005
+        ]
+    },
+    "1005": {
+        "name": "FuncE",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            1004,
+            1001
+        ]
+    },
+    "1006": {
+        "name": "FuncF",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": []
+    },
+    "2001": {
+        "name": "FuncA-2",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            2006
+        ]
+    },
+    "2002": {
+        "name": "FuncB-2",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": true,
+        "branch": [
+            2001,
+            2003
+        ]
+    },
+    "2003": {
+        "name": "FuncC-2",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            2004
+        ]
+    },
+    "2004": {
+        "name": "FuncD-2",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            2005
+        ]
+    },
+    "2005": {
+        "name": "FuncE-2",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            2001,
+            2005
+        ]
+    },
+    "2006": {
+        "name": "FuncF-2",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": []
+    },
+    "3001": {
+        "name": "FuncA-3",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": true,
+        "branch": [
+            3001
+        ]
+    },
+    "4001": {
+        "name": "FuncA-4",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": true,
+        "branch": [
+            4002
+        ]
+    },
+    "4002": {
+        "name": "FuncB-4",
+        "section": ".text",
+        "size": 0,
+        "type": 17,
+        "scope": 11,
+        "root": false,
+        "branch": [
+            4002
+        ]       
+    }    
+}
