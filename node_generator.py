@@ -1,16 +1,14 @@
-""" Builds a call graph from a user provided ELF binary file, then saves the
-    information to file. The output file is intended to be opend by an
-    optional graph viewer.
+""" Builds a node list from a user provided ELF binary file, then saves the
+    information to file.
 """
 import argparse
+from pathlib import Path
 
 import json
 
 from enum import auto, IntEnum
 
 import subprocess, sys
-
-from pathlib import Path
 
 
 class SymbolScope(IntEnum):
@@ -36,11 +34,38 @@ class NodeType(IntEnum):
     vtable = auto()
     assembly = auto()
 
-tool_path = "C:\Program Files (x86)\Atollic\TrueSTUDIO for STM32 9.2.0\ARMTools\\bin\\"
-tool_prefix = "arm-atollic-eabi-"
-command = "objdump"
 
-cmd = tool_path + tool_prefix + command
+parent_parser = argparse.ArgumentParser(
+    add_help=False,
+    fromfile_prefix_chars="@"
+    )
+
+parent_parser.add_argument('-i', '--infile', required=True,
+    type=argparse.FileType('r', encoding='UTF-8'), 
+    help="Source binary file, ELF format"
+    )
+
+parent_parser.add_argument('-to', '--tool_objdump', nargs='?',
+    type=lambda p: Path(p).absolute(),
+    default="objdump.exe",
+    help='File to be used for objdump utility'
+    )
+
+parent_parser.add_argument('-op', '--output_path', nargs='?',
+    type=lambda p: Path(p).absolute(),
+    default=Path(__file__).absolute().parent / "sc-output",
+    help='Directory to store output files'
+    )
+
+parent_parser.add_argument('-sp', '--stack_path', nargs='*', 
+    type=lambda p: Path(p).absolute(),
+    default=Path(__file__).absolute().parent,
+    help='Directory(s) to obtain stack usage (*.su) file(s)'
+    )
+
+parent_parser.add_argument("-v", "--vector", nargs='?',
+    default="",
+    help="Symbol that identifies a vector table for ISRs")
 
 
 
@@ -203,39 +228,45 @@ class Node():
     """ Each node represents a function or object used in a call graph.
     """
     
-    def __init__(self):
+    def __init__(self, objdump=Path(), infile=Path(), vector="", stack_path=Path(), output_path=('.')):
         self.nodes = {}
         self.dispatch_table = {}
-        self.filename = ""
-        self.vector_table = ""
 
-    def validate_input(self):
-        # initiate the parser
-        parser = argparse.ArgumentParser()
+        self.objdump = Path(objdump)
+        self.infile = Path(infile).absolute()
+        self.vector_table = vector
+        self.stack_path = Path(stack_path)
+        self.output_path = Path(output_path)
 
-        parser.add_argument("-v", "--vector", help="set vector table for ISR")
-
-        """ Validate user input by verifying file can be opened, then close since this
-            script only needs the filename.
+    def cli(self):
+        """ Process user input from the command line.
         """
-        parser.add_argument('-i', '--infile', 
-                            help="input file, ELF format", metavar="FILE",
-                            type=argparse.FileType('r', encoding='UTF-8'), 
-                            required=True)
+        cli_parser = argparse.ArgumentParser(
+            parents=[parent_parser],
+            fromfile_prefix_chars="@",
+            description="Analysis binary code for stack and call information."
+            )
 
-        args = parser.parse_args()
+        args = cli_parser.parse_args()
+
+        # Input file will be processed directly by objdump utility, just 
+        # validate user input file is readable and close.
         args.infile.close()
 
-        if args.vector:
-            self.vector_table = args.vector
-
-        self.filename = args.infile.name
+        # Set internal references
+        # TODO need to validate user input, directory(s) exist or need to be
+        # created
+        self.infile = Path(args.infile.name).absolute()
+        self.objdump = args.tool_objdump
+        self.output_path = args.output_path
+        self.stack_path = args.stack_path
+        self.vector = args.vector
 
     def get_symbols(self):
         """ Creates a raw symbol list from the user provided input file
         """
-        terminal = subprocess.Popen([cmd, '--syms', '--demangle', 
-                            self.filename ], shell=True, 
+        terminal = subprocess.Popen([str(self.objdump), '--syms', '--demangle', 
+                            str(self.infile) ], shell=True, 
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
         stdout, stderr = terminal.communicate()
@@ -247,8 +278,8 @@ class Node():
     def get_disassembly(self):
         """ Disassemble the user provided input file
         """
-        terminal = subprocess.Popen([cmd, '--disassemble-all', '--demangle', 
-                            self.filename ], shell=True, 
+        terminal = subprocess.Popen([str(self.objdump), '--disassemble-all', '--demangle', 
+                            str(self.infile) ], shell=True, 
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
         stdout, stderr = terminal.communicate()
@@ -256,11 +287,16 @@ class Node():
         lines = stdout.splitlines()
         return lines
 
+    def get_nodes(self):
+        """ Return reference to internal node list
+        """
+        return self.nodes
+
 
     def save(self):
         """ Save all nodes to file
         """
-        fn = Path(self.filename)
+        fn = Path(self.infile)
         with open( fn.with_suffix('.node.json'), 'w') as outfile:
             json.dump(self.nodes, outfile, indent=4)
         outfile.close()
@@ -590,10 +626,10 @@ class Node():
         """
 
 def main():
-    print("Stack Checker")
+    print("Node generator")
 
     nodes = Node()
-    nodes.validate_input()
+    nodes.cli()
     nodes.build()
     nodes.link()
     nodes.show_node_metrics()

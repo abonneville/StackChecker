@@ -20,10 +20,10 @@ class RecursionTestCase(unittest.TestCase):
         """ Run one-time before any testing is performed in this class
         """
         cls.filename = "test_recursion.json"
-        cls.nodes = conv.Converter(cls.filename)
-        cls.nodes.load()
+        cls.nodes = conv.Converter()
+        cls.nodes.load(cls.filename)
         cls.nodes.to_call_list()
-        cls.nodes.save()
+        cls.nodes.save(cls.filename)
 
     @classmethod
     def tearDownClass(cls):

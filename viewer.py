@@ -3,6 +3,7 @@
 """
 import argparse
 import json
+from pathlib import Path
 
 import uuid
 import tkinter as tk
@@ -11,14 +12,19 @@ from tkinter import ttk
 class Viewer:
     """ Displays a call graph from a nested dictionary
     """
-    def __init__(self, filename):
-        self.filename = filename
+    def __init__(self):
+        self.infile = Path()
         self.call_stacks = {}
+
+    def set_graph(self, graph):
+        """ Reference a call graph from a memory location
+        """
+        self.call_stacks = graph
 
     def load(self):
         """ Get call graph
         """
-        with open(self.filename, 'r') as handle:
+        with open(self.infile, 'r') as handle:
             self.call_stacks = json.load(handle)
         handle.close()
 
@@ -27,6 +33,25 @@ class Viewer:
         """ Display call graph to user
         """
         tk_tree_view(self.call_stacks)
+
+
+    def cli(self):
+        """ Process user input from the command line.
+        """
+        parser = argparse.ArgumentParser()
+
+        parser.add_argument('-i', '--infile', 
+                            help="input file, JSON format", metavar="FILE",
+                            type=argparse.FileType('r', encoding='UTF-8'), 
+                            required=True)
+
+        args = parser.parse_args()
+
+        # Validate user input file is readable and close.
+        args.infile.close()
+
+        self.infile = Path(args.infile.name).absolute()
+
 
 
 def j_tree(tree, parent, dic):
@@ -85,26 +110,11 @@ def tk_tree_view(data):
     root.minsize(2 * root.winfo_reqwidth(), root.winfo_reqheight())
     root.mainloop()
 
-def validate_input():
-    """ Assess command line arguments
-    """
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('-i', '--infile', 
-                        help="input file, JSON format", metavar="FILE",
-                        type=argparse.FileType('r', encoding='UTF-8'), 
-                        required=True)
-
-    args = parser.parse_args()
-    args.infile.close()
-
-    return args.infile.name
-
 def main():
     print("Viewer")
-    filename = validate_input()
 
-    viewer = Viewer(filename)
+    viewer = Viewer()
+    viewer.cli()
     viewer.load()
     viewer.show()
 

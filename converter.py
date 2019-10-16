@@ -1,7 +1,4 @@
 """ Convert flat node list into a call graph
-
-    JSON file to Graphviz dot format
-    https://www.graphviz.org/pdf/dotguide.pdf
 """
 import argparse
 import json
@@ -34,7 +31,7 @@ def validate_input():
     args = parser.parse_args()
     args.infile.close()
 
-    return args.infile.name
+    return Path(args.infile.name).absolute()
 
 def jsonKeys2int(x):
     """ JSON stores integer keys as a string. This method converts string
@@ -46,32 +43,42 @@ def jsonKeys2int(x):
 class Converter:
     """ Converts nodes from a flat list into a call graph
     """
-    def __init__(self, filename):
-        self.filename = filename
+    def __init__(self):
         self.nodes = {}
         self.call_graph = {}
 
-    def load(self):
-        """ Gets the node list to be processed
+    def set_nodes(self, nodes):
+        """ References a node list from a memory location
         """
-        with open(self.filename, 'r') as handle:
+        self.nodes = nodes
+
+    def load(self, infile):
+        """ Loads a node list from an external file
+        """
+        fn = Path(infile)
+        with open(fn, 'r') as handle:
             self.nodes = json.load(handle, object_hook=jsonKeys2int)
         handle.close()
         print("Number of nodes loaded: " + str(len(self.nodes)) )        
 
-    def save(self):
+    def get_graph(self):
+        """ Return reference to internal call graph
+        """
+        return self.call_graph
+
+    def save(self, outfile):
         """ Save the internal call graph to file
         """
         # Typical input filename would be 'something.node.json'
         # Expected output filename will be 'something.graph.json'
-        fn = Path(self.filename)
+        fn = Path(outfile)
         fn = fn.with_suffix('') # Remove '.json'
         fn = fn.with_suffix('.graph.json') # Replace '.node'
 
         print("Saving to file...", end="", flush=True)
-        with open( fn, 'w') as outfile:
-            json.dump(self.call_graph, outfile, indent=4)
-        outfile.close()
+        with open( fn, 'w') as handle:
+            json.dump(self.call_graph, handle, indent=4)
+        handle.close()
         print("done.")
 
     def insert_branch_node(self, parent, level, child, recursion=RecursionType.none):
@@ -200,10 +207,14 @@ class Converter:
 
 
 
-    def to_dot(self):
-        """ Convert flat list into a dot format call graph
+    def to_dot(self, infile):
+        """ Convert flat list into a dot format call graph.
+        
+            JSON file to Graphviz dot format
+            https://www.graphviz.org/pdf/dotguide.pdf
         """
-        dot = Digraph(filename=self.filename + '.gv',
+        fn = Path(infile)
+        dot = Digraph(filename=fn + '.gv',
             node_attr={'color': 'lightblue2', 'style': 'filled'})
 
         # Create nodes, and link edges
@@ -221,11 +232,11 @@ def main():
     print("Converter")
     filename = validate_input()
 
-    nodes = Converter(filename)
-    nodes.load()
-    nodes.to_call_list()
-    #nodes.to_dot() # TODO re-evaluate need to keep dot format
-    nodes.save()
+    graph = Converter()
+    graph.load(filename)
+    graph.to_call_list()
+    #graph.to_dot() # TODO re-evaluate need to keep dot format
+    graph.save(filename)
     
 
 if __name__ == "__main__":
