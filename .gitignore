@@ -6,3 +6,6 @@
 *.pyc
 *.gv
 *.dot
+*.graph.json
+*.node.json
+
