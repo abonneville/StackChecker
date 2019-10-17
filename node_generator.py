@@ -33,7 +33,6 @@ class NodeType(IntEnum):
     dispatch_table = auto()
     vector_table = auto()
     vtable = auto()
-    assembly = auto()
 
 
 parent_parser = argparse.ArgumentParser(
@@ -341,7 +340,7 @@ class Node():
                             # Discard, invalid section
                             continue
                         else:
-                            node['type'] = NodeType.assembly
+                            node['type'] = NodeType.function
                         
 
                 else:
@@ -388,7 +387,6 @@ class Node():
         function_node = 0
         filename = 0
         obj_node = 0
-        assembly_node = 0
         unknown_node = 0
         
         for node in self.nodes.values():
@@ -415,13 +413,10 @@ class Node():
             if node['type'] == NodeType.unknown:
                 unknown_node += 1
             
-            if node['type'] == NodeType.assembly:
-                assembly_node += 1
 
         print("\nFunction , total: " + str(function_node) )
         print("Filename , total: " + str(filename) )
         print("Object   , total: " + str(obj_node) )
-        print("Assembly , total: " + str(assembly_node))
         print("Unknown  , total: " + str(unknown_node) )
         print("All nodes, total: " + str(self.nodes.__len__()) )
         print("\nRoot func, total: " + str(root_node) )
@@ -507,14 +502,33 @@ class Node():
                     in_progress = False
                     # TODO log print("Missing node: " + line)
 
-            elif is_node_branch(line) and in_progress:
-                # Branch detected
-                target = get_branch_address(line)
-                if ( target in self.nodes):
-                    if ( not target in self.nodes[address]['branch'] ):
-                        # For optimization, we only record unique branches
-                        self.nodes[address]['branch'].append(target)
-                        self.nodes[target]['root'] = False
+            elif node_type == NodeType.function and in_progress:
+                if is_node_branch(line):
+                    # Branch detected
+                    target = get_branch_address(line)
+                    self.link_to_function(address, target)
+                    """
+
+                    if ( target in self.nodes):
+                        if ( not target in self.nodes[address]['branch'] ):
+                            # For optimization, we only record unique branches
+                            self.nodes[address]['branch'].append(target)
+                            self.nodes[target]['root'] = False
+                    """
+                else:
+                    # Evaluate for accessing dispatch table (function pointer)
+                    target = get_pointer(line)
+                    if target != -1:
+                        if target in self.dispatch_table:
+                            # ARM state
+                            function.setdefault(address, []).append(target)
+                        elif target - 1 in self.nodes:
+                            # Thumb state
+                            pass
+                            # TODO Valid function ptr calls defined and invoked at runtime, not compile time
+                            #if self.nodes[target - 1]['type'] == NodeType.function:
+                                # print(self.nodes[address]['name'] + " --- " + self.nodes[target - 1]['name'])
+                                #function.setdefault(address, []).append(target + 1)
             
             elif node_type == NodeType.obj and in_progress:
                 # Evaluate for dispatch table entry(s)
@@ -532,27 +546,11 @@ class Node():
                         line_address = get_line_address(line, ':')
                         dispatch_table[line_address] = target - 1
 
-
-            elif node_type == NodeType.function and in_progress:
-                # Evaluate for accessing dispatch table (function pointer)
-                target = get_pointer(line)
-                if target != -1:
-                    if target in self.dispatch_table:
-                        # ARM state
-                        function.setdefault(address, []).append(target)
-                    elif target - 1 in self.nodes:
-                        # Thumb state
-                        pass
-                        # TODO Valid function ptr calls defined and invoked at runtime, not compile time
-                        #if self.nodes[target - 1]['type'] == NodeType.function:
-                            # print(self.nodes[address]['name'] + " --- " + self.nodes[target - 1]['name'])
-                            #function.setdefault(address, []).append(target + 1)
-
             elif node_type == NodeType.vector_table and in_progress:
                 # Map function pointer calls
                 target = get_pointer(line)
                 self.link_to_function(address, target)
-                
+
                 """
                     if ( target in self.nodes):
                         # ARM state
