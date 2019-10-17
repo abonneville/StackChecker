@@ -31,6 +31,7 @@ class NodeType(IntEnum):
     filename = auto()
     obj = auto()
     dispatch_table = auto()
+    vector_table = auto()
     vtable = auto()
     assembly = auto()
 
@@ -260,7 +261,7 @@ class Node():
         self.objdump = args.tool_objdump
         self.output_path = args.output_path
         self.stack_path = args.stack_path
-        self.vector = args.vector
+        self.vector_table = args.vector
 
     def get_symbols(self):
         """ Creates a raw symbol list from the user provided input file
@@ -323,7 +324,11 @@ class Node():
                 if line[NodeType.index] == 'F':
                     node['type'] = NodeType.function
                 elif line[NodeType.index] == 'O':
-                    node['type'] = NodeType.obj
+                    if node['name'] == self.vector_table:
+                        node['type'] = NodeType.vector_table
+                    else:
+                        node['type'] = NodeType.obj
+
                 elif line[NodeType.index] == ' ':
                     # Functions implemented in assembly code get lumped in 
                     # here. 
@@ -460,7 +465,19 @@ class Node():
                             line_address = get_line_address(line, ':')
                             self.dispatch_table[line_address] = table
 
-
+    def link_to_function(self, parent, child):
+        """ Evaluates if the child is a valid address to a function, and if so,
+            links the parent to the child node.
+        """
+        if child != -1:
+            # Convert thumb (odd) to ARM (even) state
+            child = child if child % 2 == 0 else child - 1
+            if child in self.nodes:
+                if self.nodes[child]['type'] == NodeType.function:
+                    if ( not child in self.nodes[parent]['branch'] ):
+                        # For optimization, we only record unique branches
+                        self.nodes[parent]['branch'].append(child)
+                        self.nodes[child]['root'] = False
 
     def link(self):
         """ Updates an existing node list with a node's branch list
@@ -531,7 +548,12 @@ class Node():
                             # print(self.nodes[address]['name'] + " --- " + self.nodes[target - 1]['name'])
                             #function.setdefault(address, []).append(target + 1)
 
-                    """
+            elif node_type == NodeType.vector_table and in_progress:
+                # Map function pointer calls
+                target = get_pointer(line)
+                self.link_to_function(address, target)
+                
+                """
                     if ( target in self.nodes):
                         # ARM state
                         #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
@@ -542,9 +564,8 @@ class Node():
                         function.setdefault(address, []).append(target + 1)
                     else:
                         # Evaluate if 
-                    """
+                """
 
-        #print(dispatch)
 
         # Function link --> Reference Table --> Dispatch Table --> Function()
         # TODO issue, cannot directly access initial offset value to determine

@@ -111,7 +111,8 @@ class Converter:
         """
         # For each root node, generate a call graph
         for key, node in self.nodes.items():
-            if node['type'] == NodeType.function:
+            if (node['type'] == NodeType.function or
+                node['type'] == NodeType.vector_table):
             #if key == 134272696: # TODO remove, single branch with one direct regression
             #if key == 134342576: # TODO remove, multi-branch with one direct regression
                 if node['root']:
@@ -209,7 +210,7 @@ class Converter:
 
     def to_dot(self, infile):
         """ Convert flat list into a dot format call graph.
-        
+
             JSON file to Graphviz dot format
             https://www.graphviz.org/pdf/dotguide.pdf
         """
