@@ -16,9 +16,9 @@ Goal is to implement a call graph that can compute stack usage for both C and C+
 ## Quick Start:
 Call graph is generated from the binary *.elf file. Follow these steps:
 * Write a configuration file that captures command line parameters, example contents (config.txt):
---infile=MyApplication.elf
---tool_objdump=C:\Program Files (x86)\Atollic\TrueSTUDIO for STM32 9.2.0\ARMTools\bin\arm-atollic-eabi-objdump.exe
---vector=g_pfnVectors
+  - --infile=MyApplication.elf
+  - --tool_objdump=C:\Program Files (x86)\Atollic\TrueSTUDIO for STM32 9.2.0\ARMTools\bin\arm-atollic-eabi-objdump.exe
+  - --vector=g_pfnVectors
 * Start the analysis with "python stack_checker.py @config.txt"
 * Terminal window will display progress:
 Generating node list...done.
