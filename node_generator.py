@@ -388,6 +388,7 @@ class Node():
         filename = 0
         obj_node = 0
         unknown_node = 0
+        vector_table = 0
         
         for node in self.nodes.values():
 
@@ -413,10 +414,14 @@ class Node():
             if node['type'] == NodeType.unknown:
                 unknown_node += 1
             
+            if node['type'] == NodeType.vector_table:
+                vector_table += 1
+            
 
         print("\nFunction , total: " + str(function_node) )
         print("Filename , total: " + str(filename) )
         print("Object   , total: " + str(obj_node) )
+        print("Vector   , total: " + str(vector_table) )
         print("Unknown  , total: " + str(unknown_node) )
         print("All nodes, total: " + str(self.nodes.__len__()) )
         print("\nRoot func, total: " + str(root_node) )
@@ -488,7 +493,6 @@ class Node():
         function = {} # list, link to reference table(s)
         reference = {} # list,  link to dispatch table(s)
         dispatch = {} # list, table of function pointers
-        dispatch_table = {}
 
         for line in lines:
             if is_node_start(line):
@@ -507,29 +511,27 @@ class Node():
                     # Branch detected
                     target = get_branch_address(line)
                     self.link_to_function(address, target)
-                    """
 
-                    if ( target in self.nodes):
-                        if ( not target in self.nodes[address]['branch'] ):
-                            # For optimization, we only record unique branches
-                            self.nodes[address]['branch'].append(target)
-                            self.nodes[target]['root'] = False
-                    """
                 else:
-                    # Evaluate for accessing dispatch table (function pointer)
                     target = get_pointer(line)
                     if target != -1:
+                        # Convert thumb (odd) to ARM (even) state
+                        target = target if target % 2 == 0 else target - 1
                         if target in self.dispatch_table:
-                            # ARM state
+                            # Evaluate for accessing dispatch table (function pointer)
                             function.setdefault(address, []).append(target)
-                        elif target - 1 in self.nodes:
-                            # Thumb state
-                            pass
-                            # TODO Valid function ptr calls defined and invoked at runtime, not compile time
-                            #if self.nodes[target - 1]['type'] == NodeType.function:
-                                # print(self.nodes[address]['name'] + " --- " + self.nodes[target - 1]['name'])
-                                #function.setdefault(address, []).append(target + 1)
-            
+
+                        elif target in self.nodes:
+                            # Evaluate accessing function poiners directly
+                            #
+                            # Note: this discovers referencing functions
+                            # dynamically, such as setting a reference to.
+                            # The function is not actually called.
+                            if self.nodes[target]['type'] == NodeType.function:
+                                pass
+                                #print( self.nodes[address]['name'] + " ---- ", end="")
+                                #print( self.nodes[target]['name'] )
+             
             elif node_type == NodeType.obj and in_progress:
                 # Evaluate for dispatch table entry(s)
                 target = get_pointer(line)
@@ -543,26 +545,11 @@ class Node():
                         #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
                         dispatch.setdefault(address, []).append(target - 1)
                         
-                        line_address = get_line_address(line, ':')
-                        dispatch_table[line_address] = target - 1
 
             elif node_type == NodeType.vector_table and in_progress:
                 # Map function pointer calls
                 target = get_pointer(line)
                 self.link_to_function(address, target)
-
-                """
-                    if ( target in self.nodes):
-                        # ARM state
-                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
-                        function.setdefault(address, []).append(target)
-                    elif ( target + 1 in self.nodes):
-                        # Thumb state
-                        #print(self.nodes[address]['name'] + " --- " + self.nodes[target]['name'])
-                        function.setdefault(address, []).append(target + 1)
-                    else:
-                        # Evaluate if 
-                """
 
 
         # Function link --> Reference Table --> Dispatch Table --> Function()
@@ -606,6 +593,8 @@ class Node():
             of 1, the following will map simple function pointers.
         """ 
         
+        """
+        # Displays all functions that directly reference a dispatch table
         node_count = 0
         for method, ref in function.items():
             for _ref in ref:
@@ -624,7 +613,8 @@ class Node():
         print("References, 2nd degree")
         for key, table in reference.items():
             print(self.nodes[key]['name'] + " --- " ) #+ self.nodes[table[0]]['name'])
-
+        """
+        
         #print("All function pointers")
         #for key, ptr in self.dispatch_table.items():
         #    print(self.nodes[ ptr['table'] ]['name'] + " ---- " + self.nodes[ ptr['function'] ]['name'])
